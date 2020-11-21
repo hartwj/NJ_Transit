@@ -1,0 +1,77 @@
+### NJ Transit - MUSA Final Project
+
+# create notin operator
+`%notin%` <- Negate(`%in%`)
+
+#remove scientific notation
+options(scipen=999)
+
+## Download + Load Packages
+pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2")
+
+if (any(pckgs %notin% rownames(installed.packages())==TRUE)){
+  install.packages(pckgs, repos = c(CRAN = "http://cloud.r-project.org"))}
+
+lapply(pckgs, FUN = require, character.only = TRUE)
+
+
+### Read in CSV files
+
+files <- list.files(path = "./Raw_Data/",pattern = "*.csv", full.names = T)
+data <- sapply(files, read_csv, simplify=FALSE) %>% 
+  bind_rows(.id = "id")
+
+data$delay_binary <- ifelse(data$delay_minutes >5,1,0)
+
+## NJ Transit only
+njtransit <- data %>%
+  filter(type == "NJ Transit")
+
+##Build month and year columns; factor all character columns
+njtransit <- njtransit %>%
+  mutate(date = as.Date('10/30/2018','%m/%d/%Y'),
+         year = as.numeric(format(date,'%Y')),
+         month = as.numeric(format(date,'%m'))) %>%
+  mutate_if(., is.character, as.factor)
+
+#rush hour
+#involves manhattan or 1)from nyc 2)to nyc
+#weekend?
+
+
+
+
+##model 1 binary
+model1 <- glm(delay_binary ~ date + line, 
+              data = njtransit %>%
+                filter(year == "2018"), family = binomial(link="logit"))
+
+summary(model1)
+
+summary(model1) %>%
+  coef(.) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(.,"Variable") %>%
+  mutate(Odds_Ratio = (exp(Estimate)),
+         across(2:6, round, 2),
+         Odds_Ratio = ifelse(Odds_Ratio >100,"NA",Odds_Ratio)) %>%
+  kable(caption = "Model 1 Odds Ratios") %>%
+  kable_styling("striped", full_width = F)
+
+#model2 continuous
+model2 <- lm(delay_minutes ~ stop_sequence + line, 
+              data = njtransit %>%
+                filter(year == "2018"))
+
+summary(model2)
+
+summary(model2) %>%
+  coef(.) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(.,"Variable") %>%
+  mutate(across(2:5, round, 2)) %>%
+  kable(caption = "Model 2") %>%
+  kable_styling("striped", full_width = F)
+
+#princeon shuttle most efficient, NJ coast least efficient
+#stops add time
