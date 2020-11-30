@@ -35,23 +35,16 @@ njtransit <- njtransit %>%
          week = week(interval60),
          dotw = wday(interval60, label=TRUE))
 
+#rush hour between 6am and 10am or 4pm and 8pm
 njtransit <- njtransit %>%
-         mutate(rush = case_when(hour <= 10 & >= 6) | case_when(hour <=20 & >=16))
+         mutate(rush = ifelse(hour<10 & hour>=6,"Yes",ifelse(hour<20 & hour>=16,"Yes","No")))
 
-case_when(hour(Timestamp) < 6  ~ "NIGHT",
-          hour(Timestamp) >= 6 & hour(Timestamp) <= 10  ~ "AM",
-          hour(Timestamp) >= 10 & hour(Timestamp) < 17  ~ "WORKDAY",
-          hour(Timestamp) >= 17  ~ "EVENING"))
-
-
+#rowID and characters as factors
 njtransit <- njtransit %>%
-  mutate(date = as.Date('10/30/2018','%m/%d/%Y'),
-         year = as.numeric(format(date,'%Y')),
-         month = as.numeric(format(date,'%m'))) %>%
   mutate_if(., is.character, as.factor) %>%
   mutate(id = rownames(.))
 
-mutate(uniqueID = rownames(.))
+
 #rush hour
 #involves manhattan or 1)from nyc 2)to nyc
 #weekend?
