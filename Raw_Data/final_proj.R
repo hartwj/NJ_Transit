@@ -7,7 +7,7 @@
 options(scipen=999)
 
 ## Download + Load Packages
-pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2")
+pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2", "lubridate")
 
 if (any(pckgs %notin% rownames(installed.packages())==TRUE)){
   install.packages(pckgs, repos = c(CRAN = "http://cloud.r-project.org"))}
@@ -27,13 +27,31 @@ data$delay_binary <- ifelse(data$delay_minutes >5,1,0)
 njtransit <- data %>%
   filter(type == "NJ Transit")
 
-##Build month and year columns; factor all character columns
+##Build month and year columns
+njtransit <- njtransit %>%
+  mutate(interval60 = floor_date(ymd_hms(scheduled_time), unit = "hour"),
+         interval15 = floor_date(ymd_hms(scheduled_time), unit = "15 mins"),
+         hour = hour(interval60),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE))
+
+njtransit <- njtransit %>%
+         mutate(rush = case_when(hour <= 10 & >= 6) | case_when(hour <=20 & >=16))
+
+case_when(hour(Timestamp) < 6  ~ "NIGHT",
+          hour(Timestamp) >= 6 & hour(Timestamp) <= 10  ~ "AM",
+          hour(Timestamp) >= 10 & hour(Timestamp) < 17  ~ "WORKDAY",
+          hour(Timestamp) >= 17  ~ "EVENING"))
+
+
 njtransit <- njtransit %>%
   mutate(date = as.Date('10/30/2018','%m/%d/%Y'),
          year = as.numeric(format(date,'%Y')),
          month = as.numeric(format(date,'%m'))) %>%
-  mutate_if(., is.character, as.factor)
+  mutate_if(., is.character, as.factor) %>%
+  mutate(id = rownames(.))
 
+mutate(uniqueID = rownames(.))
 #rush hour
 #involves manhattan or 1)from nyc 2)to nyc
 #weekend?
