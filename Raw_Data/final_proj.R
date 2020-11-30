@@ -37,7 +37,17 @@ njtransit <- njtransit %>%
 
 #rush hour between 6am and 10am or 4pm and 8pm
 njtransit <- njtransit %>%
-         mutate(rush = ifelse(hour<10 & hour>=6,"Yes",ifelse(hour<20 & hour>=16,"Yes","No")))
+  mutate(weekday = recode(dotw, "Mon" = "Yes",
+                          "Tue" = "Yes",
+                          "Wed" = "Yes",
+                          "Thu" = "Yes",
+                          "Fri" = "Yes",
+                          "Sat" = "No",
+                          "Sun" = "No"))
+
+njtransit <- njtransit %>%
+         mutate(rush = ifelse(hour<10 & hour>=6 & weekday=="Yes","Yes",
+                       ifelse(hour<20 & hour>=16 & weekday=="Yes","Yes","No")))
 
 #rowID and characters as factors
 njtransit <- njtransit %>%
@@ -45,9 +55,9 @@ njtransit <- njtransit %>%
   mutate(id = rownames(.))
 
 
-#rush hour
+
 #involves manhattan or 1)from nyc 2)to nyc
-#weekend?
+
 
 
 
