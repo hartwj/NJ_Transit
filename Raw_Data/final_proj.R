@@ -27,14 +27,17 @@ data$delay_binary <- ifelse(data$delay_minutes >5,1,0)
 njtransit <- data %>%
   filter(type == "NJ Transit")
 
-##Build month and year columns
+##Build hour,day,week,month columns
+#ignoring year - there's only two (2018 & 2019 and I want random test/train splits)
 njtransit <- njtransit %>%
   mutate(interval60 = floor_date(ymd_hms(scheduled_time), unit = "hour"),
          interval15 = floor_date(ymd_hms(scheduled_time), unit = "15 mins"),
          hour = hour(interval60),
          week = week(interval60),
-         dotw = wday(interval60, label=TRUE))
+         dotw = wday(interval60, label=TRUE),
+         month = month(interval60, label=TRUE))
 
+#weekday vs. weekend
 #rush hour between 6am and 10am or 4pm and 8pm
 njtransit <- njtransit %>%
   mutate(weekday = recode(dotw, "Mon" = "Yes",
@@ -43,10 +46,8 @@ njtransit <- njtransit %>%
                           "Thu" = "Yes",
                           "Fri" = "Yes",
                           "Sat" = "No",
-                          "Sun" = "No"))
-
-njtransit <- njtransit %>%
-         mutate(rush = ifelse(hour<10 & hour>=6 & weekday=="Yes","Yes",
+                          "Sun" = "No"),
+          rush = ifelse(hour<10 & hour>=6 & weekday=="Yes","Yes",
                        ifelse(hour<20 & hour>=16 & weekday=="Yes","Yes","No")))
 
 #rowID and characters as factors
@@ -55,8 +56,8 @@ njtransit <- njtransit %>%
   mutate(id = rownames(.))
 
 
-
-#involves manhattan or 1)from nyc 2)to nyc
+#Origin & Destination Feature
+#Includes Manhattan
 
 
 
