@@ -99,9 +99,10 @@ station_geo$to_id <- station_geo$ATIS_ID
 njtransit_sf <- station_geo %>%
   st_drop_geometry() %>%
   select(LATITUDE, LONGITUDE,STATION,to_id) %>%
-  plyr::join(njtransit,.,by="to_id",type="left",match="first") %>%
-  st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
-  st_transform('ESRI:102318')
+  plyr::join(njtransit,.,by="to_id",type="left",match="first")
+#%>%
+ # st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
+  #st_transform('ESRI:102318')
 
 
 #Theres about 7 stations or so that aren't being captured
