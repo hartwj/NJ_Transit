@@ -104,6 +104,8 @@ njtransit_sf <- station_geo %>%
   st_transform('ESRI:102318')
 
 
+#Theres about 7 stations or so that aren't being captured
+x <- njtransit_sf[is.na(njtransit_sf$STATION),]
 
 
 
