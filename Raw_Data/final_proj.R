@@ -9,7 +9,7 @@ options(scipen=999)
 
 ## Download + Load Packages
 pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2", "lubridate","sf",
-           "riem","tigris", "gganimate","gridExtra","knitr")
+           "riem","tigris", "gganimate","gridExtra","knitr","tidyr")
 
 if (any(pckgs %notin% rownames(installed.packages())==TRUE)){
   install.packages(pckgs, repos = c(CRAN = "http://cloud.r-project.org"))}
@@ -114,21 +114,21 @@ njtransit <- njtransit %>%
          year = year(interval60),
          hour = hour(interval60),
          week = week(interval60),
-         dotw = wday(interval60, label=TRUE),
-         month = month(interval60, label=TRUE))
+         dotw = wday(interval60),
+         month = month(interval60))
 
 # Weekday vs. weekend
 # Rush hour between 6am and 10am or 4pm and 8pm
 njtransit <- njtransit %>%
-  mutate(weekday = recode(dotw, "Mon" = "Yes",
-                          "Tue" = "Yes",
-                          "Wed" = "Yes",
-                          "Thu" = "Yes",
-                          "Fri" = "Yes",
-                          "Sat" = "No",
-                          "Sun" = "No"),
-          rush = ifelse(hour<10 & hour>=6 & weekday=="Yes","Yes",
-                       ifelse(hour<20 & hour>=16 & weekday=="Yes","Yes","No")))
+  mutate(weekday = recode(dotw, "Mon" = "1",
+                          "Tue" = "1",
+                          "Wed" = "1",
+                          "Thu" = "1",
+                          "Fri" = "1",
+                          "Sat" = "0",
+                          "Sun" = "0"),
+          rush = ifelse(hour<10 & hour>=6 & weekday=="1","1",
+                       ifelse(hour<20 & hour>=16 & weekday=="1","1","0")))
 
 # --- Features ----
 # Origin & Destination Feature
@@ -146,11 +146,23 @@ njtransit <- njtransit %>%
   select(train_id,origin,destination) %>%
   right_join(njtransit,.,by="train_id")
 
-# Includes Manhattan Feature
+# Includes Manhattan Feature % Line dummies
 njtransit <- njtransit %>%
-  mutate(manhattan = ifelse(origin == "New York Penn Station","Yes",ifelse(destination == "New York Penn Station","Yes","No")))
+  mutate(manhattan = ifelse(origin == "New York Penn Station","1",ifelse(destination == "New York Penn Station","1","0")),
+         NEC = as.integer(str_detect(line,"Northeast Corrdr")),
+         NJC = as.integer(str_detect(line,"No Jersey Coast")),
+         Main = as.integer(str_detect(line,"Main Line")),
+         Morristown = as.integer(str_detect(line,"Morristown Line")),
+         Gladstone = as.integer(str_detect(line,"Gladstone Branch")),
+         Raritan = as.integer(str_detect(line,"Raritan Valley")),
+         Bergen = as.integer(str_detect(line,"Bergen Co. Line")),
+         ACLine= as.integer(str_detect(line,"Atl. City Line")),
+         Montclair = as.integer(str_detect(line,"Montclair-Boonton")),
+         Princeton = as.integer(str_detect(line,"Princeton Shuttle")),
+         Pascack = as.integer(str_detect(line,"Pascack Valley")),
+         Meadowlands = as.integer(str_detect(line,"Meadowlands Rail")))
 
-# Characters as factors
+# Characters as factors & train line dummies
 njtransit <- njtransit %>%
   mutate_if(., is.character, as.factor) 
 
@@ -205,13 +217,13 @@ njtransit <- weather.Panel %>%
 #                     ifelse(train_id %in% 4420:4431, "23",             
 #                     ifelse(train_id %in% 4600:4628, "18",
 #                     ifelse(train_id %in% 4300:4303, "52",
-#                    ifelse(train_id %in% 5000:5010 | train_id %in% 5200:5205 | train_id %in% 5500:5534 , "29", 
+#                     ifelse(train_id %in% 5000:5010 | train_id %in% 5200:5205 | train_id %in% 5500:5534 , "29", 
 #                     ifelse(train_id %in% 5155:5169 | train_id %in% 5220:5234, "31", 
 #                     ifelse(train_id %in% 5300:5460, "17", 
 #                     ifelse(train_id %in% 5011:5031 | train_id %in% 5235:5264 | train_id %in% 5535:5582, "24", 
-#                    ifelse(train_id %in% 6000:6083 | train_id %in% 6200:6213 | train_id %in% 6500:6601, "15", 
-#                    ifelse(train_id %in% 7000:7051 | train_id %in% 7200:7298 | train_id %in% 7500:7677, "10", 
-#                    ifelse(train_id %in% 7052:7061 | train_id %in% 7678:7767, "7", NA
+#                     ifelse(train_id %in% 6000:6083 | train_id %in% 6200:6213 | train_id %in% 6500:6601, "15", 
+#                     ifelse(train_id %in% 7000:7051 | train_id %in% 7200:7298 | train_id %in% 7500:7677, "10", 
+#                     ifelse(train_id %in% 7052:7061 | train_id %in% 7678:7767, "7", NA
 #                           )))))))))))))))))))))))))))
 
 ### Station geometries
@@ -241,7 +253,8 @@ station_geo <- station_geo %>%
     to_id = ifelse(to_id=="168", "38187", to_id),
     to_id = ifelse(to_id=="166", "38105", to_id),
     to_id = ifelse(to_id=="172", "39635", to_id),
-    to_id = ifelse(STATION=="Wesmont", "43599", to_id))
+    to_id = ifelse(STATION=="Wesmont", "43599", to_id)
+  )
 
 #breaks at st_as_sf because tons of missing lat and long because these freaking IDs aren't 100% the same
 njtransit_sf <- station_geo %>%
