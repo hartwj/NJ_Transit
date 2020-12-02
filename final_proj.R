@@ -146,23 +146,11 @@ njtransit <- njtransit %>%
 njtransit <- njtransit %>%
   mutate(incl_manhattan = ifelse(origin == "New York Penn Station","1",ifelse(destination == "New York Penn Station","1","0")),
          incl_hoboken = ifelse(origin == "Hoboken","1",ifelse(destination == "Hoboken","1","0")),
-         incl_newark = ifelse(origin == "Newark Penn Station","1",ifelse(destination == "Newark Penn Station","1","0")),
-         NEC = as.integer(str_detect(line,"Northeast Corrdr")),
-         NJC = as.integer(str_detect(line,"No Jersey Coast")),
-         Main = as.integer(str_detect(line,"Main Line")),
-         Morristown = as.integer(str_detect(line,"Morristown Line")),
-         Gladstone = as.integer(str_detect(line,"Gladstone Branch")),
-         Raritan = as.integer(str_detect(line,"Raritan Valley")),
-         Bergen = as.integer(str_detect(line,"Bergen Co. Line")),
-         ACLine= as.integer(str_detect(line,"Atl. City Line")),
-         Montclair = as.integer(str_detect(line,"Montclair-Boonton")),
-         Princeton = as.integer(str_detect(line,"Princeton Shuttle")),
-         Pascack = as.integer(str_detect(line,"Pascack Valley")),
-         Meadowlands = as.integer(str_detect(line,"Meadowlands Rail")))
+         incl_newark = ifelse(origin == "Newark Penn Station","1",ifelse(destination == "Newark Penn Station","1","0")))
 
-# Characters as factors & train line dummies
-njtransit <- njtransit %>%
-  mutate_if(., is.character, as.factor) 
+# Characters as factors & train line dummies - not doing this for now
+#njtransit <- njtransit %>%
+#  mutate_if(., is.character, as.factor) 
 
 # Weather Feature
 weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-18")
@@ -229,10 +217,11 @@ station_geo <- st_read("https://opendata.arcgis.com/datasets/acf1aa71053f4bb48a1
   st_transform('ESRI:102318')
 
 ## Prepping for merge
+## Removing leading characters from train id(ATIS_ID)
 station_geo$ATIS_ID <- gsub("RAIL","",station_geo$ATIS_ID) 
 station_geo$ATIS_ID <- sub("^0+", "", station_geo$ATIS_ID)
 
-## merge
+## recode non matching IDs - thank you NJTransit
 njtransit$to_id <- as.character(njtransit$to_id)
 
 station_geo$to_id <- station_geo$ATIS_ID
@@ -253,7 +242,7 @@ station_geo <- station_geo %>%
     to_id = ifelse(STATION=="Wesmont", "43599", to_id)
   )
 
-#breaks at st_as_sf because tons of missing lat and long because these freaking IDs aren't 100% the same
+#merge station geos to njtransit
 njtransit_sf <- station_geo %>%
   st_drop_geometry() %>%
   select(LATITUDE, LONGITUDE,STATION,to_id) %>%
@@ -278,6 +267,18 @@ grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
 features <- c("delay_binary","stop_sequence","hour","week"/"month","dotw"/"weekday","rush",
               "incl_manhattan","incl_hoboken","incl_newark",
               "Temperature","Precipitation","Wind_Speed")
+
+
+### Ken Questions
+
+#1- Characters or Factors? Depends on GLM or LM?
+
+
+#2- Time Lag & Spatial Lag - Do we need to do it? Spatial would require tracts joined to stations?
+
+
+
+
 
 # --- Modeling ----
 ## model 1 binary
