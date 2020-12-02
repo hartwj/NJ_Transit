@@ -1,4 +1,5 @@
 ### NJ Transit - MUSA Final Project
+x <- njtransit[rowSums(is.na(njtransit)) > 0,]
 
 # --- Setup: Libraries ----
 # create notin operator
@@ -127,8 +128,6 @@ njtransit <- njtransit %>%
 
 # --- Features ----
 # Origin & Destination Feature
-x <- njtransit[rowSums(is.na(njtransit)) > 0,]
-
 njtransit <- njtransit %>%
   group_by(train_id) %>%
   arrange(stop_sequence) %>%
@@ -180,14 +179,6 @@ weather.Panel <-
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt)) %>%
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
-
-grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
-             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
-               labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
-               labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
-               labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
 
 # Join weather data & add train age
 njtransit <- weather.Panel %>%
@@ -263,6 +254,18 @@ njtransit_sf <- station_geo %>%
          STATION = ifelse(to=="Ramsey Main St", "Ramsey Main St", STATION)) %>%
   st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
   st_transform('ESRI:102318')
+
+# --- Exploratory Analysis ----
+# Plot weather features
+grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
+             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
+               labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme(),
+             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
+               labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme(),
+             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
+               labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
+
+# Run correlations btwn delay_binary and features
 
 # --- Modeling ----
 ## model 1 binary
