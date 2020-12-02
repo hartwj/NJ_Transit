@@ -99,12 +99,13 @@ files <- list.files(path = "./Raw_Data/",pattern = "*.csv", full.names = T)
 data <- sapply(files, read_csv, simplify=FALSE) %>% 
   bind_rows(.id = "id")
 
-data$delay_binary <- ifelse(data$delay_minutes >5,1,0)
-
 ## NJ Transit only
 njtransit <- data %>%
   filter(type == "NJ Transit") %>%
-  mutate(id = rownames(.))
+  mutate(id = rownames(.)) %>%
+  na.omit()
+
+njtransit$delay_binary <- ifelse(njtransit$delay_minutes >5,1,0)
 
 ## Create hour, week, day of the week, and month columns
 # Ignoring year - there's only two (2018 & 2019 and I want random test/train splits)
@@ -126,7 +127,7 @@ njtransit <- njtransit %>%
 
 # --- Features ----
 # Origin & Destination Feature
-sum(is.na(njtransit))
+x <- njtransit[rowSums(is.na(njtransit)) > 0,]
 
 njtransit <- njtransit %>%
   group_by(train_id) %>%
