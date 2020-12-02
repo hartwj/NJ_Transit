@@ -111,6 +111,7 @@ njtransit <- data %>%
 njtransit <- njtransit %>%
   mutate(interval60 = floor_date(ymd_hms(scheduled_time), unit = "hour"),
          interval15 = floor_date(ymd_hms(scheduled_time), unit = "15 mins"),
+         year = year(interval60),
          hour = hour(interval60),
          week = week(interval60),
          dotw = wday(interval60, label=TRUE),
@@ -130,33 +131,6 @@ njtransit <- njtransit %>%
                        ifelse(hour<20 & hour>=16 & weekday=="Yes","Yes","No")))
 
 # --- Features ----
-# Weather Feature
-weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-31")
-
-## Plot Newark weather data
-weather.Panel <-  
-  weather.Data %>%
-  mutate_if(is.character, list(~replace(as.character(.), is.na(.), "0"))) %>% 
-  replace(is.na(.), 0) %>%
-  mutate(interval60 = ymd_h(substr(valid, 1, 13))) %>%
-  mutate(week = week(interval60),
-         dotw = wday(interval60, label=TRUE)) %>%
-  group_by(interval60) %>%
-  summarize(Temperature = max(tmpf),
-            Precipitation = sum(p01i),
-            Wind_Speed = max(sknt)) %>%
-  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
-
-grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
-             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
-               labs(title="Precipitation", x="Hour", y="Percipitation") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
-               labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
-               labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
-
-
-
 # Origin & Destination Feature
 njtransit <- njtransit %>%
   group_by(train_id) %>%
@@ -180,6 +154,34 @@ njtransit <- njtransit %>%
 njtransit <- njtransit %>%
   mutate_if(., is.character, as.factor) 
 
+# Weather Feature
+weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-31")
+
+## Plot Newark weather data
+weather.Panel <-  
+  weather.Data %>%
+  mutate_if(is.character, list(~replace(as.character(.), is.na(.), "0"))) %>% 
+  replace(is.na(.), 0) %>%
+  mutate(interval60 = ymd_h(substr(valid, 1, 13)),
+         interval15 = floor_date(ymd_hms(scheduled_time), unit = "15 mins")) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  group_by(interval60) %>%
+  summarize(Temperature = max(tmpf),
+            Precipitation = sum(p01i),
+            Wind_Speed = max(sknt)) %>%
+  mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
+grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
+             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
+               labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme(),
+             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
+               labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme(),
+             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
+               labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
+
+njtransit <- weather.Panel %>%
+  plyr::join(njtransit,.,by="interval60",type="left")  
 
 ### Station geometries
 ### Used Long Island ESRI which is recommended for NYC
@@ -187,35 +189,42 @@ station_geo <- st_read("https://opendata.arcgis.com/datasets/acf1aa71053f4bb48a1
   st_transform('ESRI:102318')
 
 ## Prepping for merge
-
 station_geo$ATIS_ID <- gsub("RAIL","",station_geo$ATIS_ID) 
 station_geo$ATIS_ID <- sub("^0+", "", station_geo$ATIS_ID)
 
 ## merge
 njtransit$to_id <- as.character(njtransit$to_id)
-station_geo$to_id <- station_geo$ATIS_ID 
+
+station_geo$to_id <- station_geo$ATIS_ID
+station_geo <- station_geo %>%
+  mutate(
+    to_id = ifelse(to_id=="82", "37169", to_id),
+    to_id = ifelse(to_id=="163", "32905", to_id),
+    to_id = ifelse(to_id=="65", "32906", to_id),
+    to_id = ifelse(to_id=="165", "38081", to_id),
+    to_id = ifelse(to_id=="171", "39472", to_id),
+    to_id = ifelse(to_id=="164", "37953", to_id),
+    to_id = ifelse(to_id=="183", "43298", to_id),
+    to_id = ifelse(to_id=="128", "38417", to_id),
+    to_id = ifelse(to_id=="167", "38174", to_id),
+    to_id = ifelse(to_id=="168", "38187", to_id),
+    to_id = ifelse(to_id=="166", "38105", to_id),
+    to_id = ifelse(to_id=="172", "39635", to_id),
+    to_id = ifelse(STATION=="Wesmont", "43599", to_id))
 
 #breaks at st_as_sf because tons of missing lat and long because these freaking IDs aren't 100% the same
 njtransit_sf <- station_geo %>%
   st_drop_geometry() %>%
   select(LATITUDE, LONGITUDE,STATION,to_id) %>%
-  plyr::join(njtransit,.,by="to_id",type="left",match="first")
-#%>%
- # st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
-  #st_transform('ESRI:102318')
+  plyr::join(njtransit,.,by="to_id",type="left",match="first") %>%
+  mutate(LATITUDE = ifelse(to=="Ramsey Main St", "41.05707", LATITUDE),
+         LONGITUDE = ifelse(to=="Ramsey Main St", "-74.14220", LONGITUDE),
+         STATION = ifelse(to=="Ramsey Main St", "Ramsey Main St", STATION)) %>%
+  st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
+  st_transform('ESRI:102318')
 
-
-#Theres about 7 stations or so that aren't being captured
-x <- njtransit_sf[is.na(njtransit_sf$STATION),]
-
-
-
-
-
-
-
-
-##model 1 binary
+# --- Modeling ----
+## model 1 binary
 model1 <- glm(delay_binary ~ date + line, 
               data = njtransit %>%
                 filter(year == "2018"), family = binomial(link="logit"))
