@@ -144,7 +144,9 @@ njtransit <- njtransit %>%
 
 # Includes Manhattan Feature % Line dummies
 njtransit <- njtransit %>%
-  mutate(manhattan = ifelse(origin == "New York Penn Station","1",ifelse(destination == "New York Penn Station","1","0")),
+  mutate(incl_manhattan = ifelse(origin == "New York Penn Station","1",ifelse(destination == "New York Penn Station","1","0")),
+         incl_hoboken = ifelse(origin == "Hoboken","1",ifelse(destination == "Hoboken","1","0")),
+         incl_newark = ifelse(origin == "Newark Penn Station","1",ifelse(destination == "Newark Penn Station","1","0")),
          NEC = as.integer(str_detect(line,"Northeast Corrdr")),
          NJC = as.integer(str_detect(line,"No Jersey Coast")),
          Main = as.integer(str_detect(line,"Main Line")),
@@ -163,22 +165,29 @@ njtransit <- njtransit %>%
   mutate_if(., is.character, as.factor) 
 
 # Weather Feature
-weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-31")
+weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-18")
+
+#Trying to fix the weather NA issue: create table with every single hour
+#weather.Features <- data.table(interval60 = )
+#start <- ymd_hms("2018-03-01 00:00:00")
+#end <- ymd_hms("2020-05-18 23:00:00")
+#interval(end, start)
 
 ## Plot Newark weather data
 weather.Panel <-  
   weather.Data %>%
   mutate_if(is.character, list(~replace(as.character(.), is.na(.), "0"))) %>% 
   replace(is.na(.), 0) %>%
-  mutate(interval60 = ymd_h(substr(valid, 1, 13)),
-         interval15 = floor_date(ymd_hms(scheduled_time), unit = "15 mins")) %>%
-  mutate(week = week(interval60),
+  mutate(interval60 = floor_date(ymd_h(substr(valid, 1, 13))),
+         week = week(interval60),
          dotw = wday(interval60, label=TRUE)) %>%
   group_by(interval60) %>%
   summarize(Temperature = max(tmpf),
             Precipitation = sum(p01i),
             Wind_Speed = max(sknt)) %>%
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
+
 
 # Join weather data & add train age
 njtransit <- weather.Panel %>%
@@ -266,6 +275,9 @@ grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
                labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
 
 # Run correlations btwn delay_binary and features
+features <- c("delay_binary","stop_sequence","hour","week"/"month","dotw"/"weekday","rush",
+              "incl_manhattan","incl_hoboken","incl_newark",
+              "Temperature","Precipitation","Wind_Speed")
 
 # --- Modeling ----
 ## model 1 binary
