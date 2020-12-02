@@ -114,24 +114,20 @@ njtransit <- njtransit %>%
          year = year(interval60),
          hour = hour(interval60),
          week = week(interval60),
-         dotw = wday(interval60),
+         dotw = wday(interval60, week_start = getOption("lubridate.week.start", 1)),
          month = month(interval60))
 
 # Weekday vs. weekend
 # Rush hour between 6am and 10am or 4pm and 8pm
 njtransit <- njtransit %>%
-  mutate(weekday = recode(dotw, "Mon" = "1",
-                          "Tue" = "1",
-                          "Wed" = "1",
-                          "Thu" = "1",
-                          "Fri" = "1",
-                          "Sat" = "0",
-                          "Sun" = "0"),
-          rush = ifelse(hour<10 & hour>=6 & weekday=="1","1",
-                       ifelse(hour<20 & hour>=16 & weekday=="1","1","0")))
+  mutate(weekday = ifelse(dotw %in% 1:5,"1","0"),
+         rush = ifelse(hour<10 & hour>=6 & weekday=="1","1",
+                ifelse(hour<20 & hour>=16 & weekday=="1","1","0")))
 
 # --- Features ----
 # Origin & Destination Feature
+sum(is.na(njtransit))
+
 njtransit <- njtransit %>%
   group_by(train_id) %>%
   arrange(stop_sequence) %>%
