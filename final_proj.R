@@ -1,5 +1,6 @@
 ### NJ Transit - MUSA Final Project
 x <- njtransit[rowSums(is.na(njtransit)) > 0,]
+njtransit <- njtransit %>% select(-Temperature, -Precipitation, -Wind_Speed)
 
 # --- Setup: Libraries ----
 # create notin operator
@@ -175,11 +176,14 @@ weather.Panel <-
             Wind_Speed = max(sknt)) %>%
   mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
-
-
-# Join weather data & add train age
+# Join weather data 
 njtransit <- weather.Panel %>%
-  plyr::join(njtransit,.,by="interval60",type="left")
+  plyr::join(njtransit,.,by="interval60",type="left") %>%
+  mutate(weather_na = ifelse(is.na(Temperature), "1",
+                      ifelse(is.na(Precipitation), "1",
+                      ifelse(is.na(Wind_Speed), "1","0"))))
+
+njtransit[is.na(njtransit)] = 0
 
 # Lol, I tried to get the ages, but like 88% of the rows were NAs so clearly something's off
 #njtransit_age <- njtransit %>%
@@ -252,6 +256,33 @@ njtransit_sf <- station_geo %>%
          STATION = ifelse(to=="Ramsey Main St", "Ramsey Main St", STATION)) %>%
   st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs=4326, agr = "constant") %>%
   st_transform('ESRI:102318')
+
+#distance to hubs
+hub.nyc <-
+  filter(station_geo, STATION == "New York Penn Station") %>%
+  st_centroid()
+hub.hoboken <-
+  filter(station_geo, STATION == "Hoboken Terminal") %>%
+  slice(n()) %>%
+  st_centroid()
+hub.philly <-
+  filter(station_geo, STATION == "Suburban Station") %>%
+  st_centroid()
+hub.newark <-
+  filter(station_geo, STATION == "Newark Penn Station") %>%
+  slice(n()) %>%
+  st_centroid()
+hub.secaucus <-
+  filter(station_geo, STATION == "Secaucus Junction Upper Level") %>%
+  st_centroid()
+
+njtransit_sf <- njtransit_sf %>%
+  mutate(distNYC =  as.numeric(st_distance(njtransit_sf,hub.nyc)),
+         distHOB =  as.numeric(st_distance(njtransit_sf,hub.hoboken)),
+         distEWR =  as.numeric(st_distance(njtransit_sf,hub.newark)),
+         distPHL =  as.numeric(st_distance(njtransit_sf,hub.philly)),
+         distSEC =  as.numeric(st_distance(njtransit_sf,hub.secaucus)))
+  
 
 # --- Exploratory Analysis ----
 # Plot weather features
