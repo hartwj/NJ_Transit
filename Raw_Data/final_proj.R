@@ -180,8 +180,39 @@ grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
              ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
                labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
 
+# Join weather data & add train age
 njtransit <- weather.Panel %>%
-  plyr::join(njtransit,.,by="interval60",type="left")  
+  plyr::join(njtransit,.,by="interval60",type="left")
+
+# Lol, I tried to get the ages, but like 88% of the rows were NAs so clearly something's off
+#njtransit_age <- njtransit %>%
+#  mutate(train_age = ifelse(train_id %in% 500:503, "48",
+#                     ifelse(train_id %in% 1304:1533, "25", 
+#                     ifelse(train_id %in% 1600:1609 | train_id %in% 1700:1760 | train_id %in% 5100:5134 | train_id %in% 5707:5751, "33", 
+#                     ifelse(train_id %in% 4000:4032, "14", 
+#                     ifelse(train_id %in% 4100:4112, "29",
+#                     ifelse(train_id %in% 4113:4129, "22",
+#                     ifelse(train_id %in% 4130:4144, "30",
+#                     ifelse(train_id %in% 4145:4150, "26",
+#                     ifelse(train_id %in% 4184:4189, "30",
+#                     ifelse(train_id == "4190", "30",
+#                     ifelse(train_id %in% 4191:4192, "21",
+#                     ifelse(train_id %in% 4193:4194, "17",             
+#                     ifelse(train_id %in% 4200:4219, "23",
+#                     ifelse(train_id %in% 4300:4303, "52",
+#                     ifelse(train_id %in% 4400:4414, "30",
+#                     ifelse(train_id %in% 4415:4419, "25",
+#                     ifelse(train_id %in% 4420:4431, "23",             
+#                     ifelse(train_id %in% 4600:4628, "18",
+#                     ifelse(train_id %in% 4300:4303, "52",
+#                    ifelse(train_id %in% 5000:5010 | train_id %in% 5200:5205 | train_id %in% 5500:5534 , "29", 
+#                     ifelse(train_id %in% 5155:5169 | train_id %in% 5220:5234, "31", 
+#                     ifelse(train_id %in% 5300:5460, "17", 
+#                     ifelse(train_id %in% 5011:5031 | train_id %in% 5235:5264 | train_id %in% 5535:5582, "24", 
+#                    ifelse(train_id %in% 6000:6083 | train_id %in% 6200:6213 | train_id %in% 6500:6601, "15", 
+#                    ifelse(train_id %in% 7000:7051 | train_id %in% 7200:7298 | train_id %in% 7500:7677, "10", 
+#                    ifelse(train_id %in% 7052:7061 | train_id %in% 7678:7767, "7", NA
+#                           )))))))))))))))))))))))))))
 
 ### Station geometries
 ### Used Long Island ESRI which is recommended for NYC
