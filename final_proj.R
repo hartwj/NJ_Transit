@@ -11,7 +11,7 @@ options(scipen=999)
 
 ## Download + Load Packages
 pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2", "lubridate","sf",
-           "riem","tigris", "gganimate","gridExtra","knitr","tidyr")
+           "riem","tigris", "gganimate","gridExtra","knitr","tidyr","caret")
 
 if (any(pckgs %notin% rownames(installed.packages())==TRUE)){
   install.packages(pckgs, repos = c(CRAN = "http://cloud.r-project.org"))}
@@ -334,6 +334,9 @@ njtransit_sf %>%
        subtitle = "Weekday (1) vs. Weekend (0)") +
   plotTheme() 
 
+## Day of the week?
+
+
 ## Month 
 
 njtransit_sf %>%
@@ -446,38 +449,48 @@ summary(mod1)
 group
 
 # --- Modeling ----
-## model 1 kitchen sink
+## model 1 is station + calendar
 
 mod1df <- njtransit_sf %>%
   st_drop_geometry() %>%
-  group_by(to,hour,weekday,month)
+  group_by(to,hour,weekday,month) %>%
+  summarize(mean_delay = mean(delay_minutes))
+
+mod1df <- mod1df %>%
+  mutate_if(.,is.character, as.factor)
+
+mod1df$to <- as.factor(mod1df$to)
+mod1df$weekday <- as.factor(mod1df$weekday)
+str(mod1df)
+#njtra <- njtransit %>%
+#  mutate_if(., is.character, as.factor)
+
+set.seed(3457)
+
+inTrain <- createDataPartition(
+  y = mod1df$mean_delay, 
+  p = .60, list = FALSE)
+mod1.training <- as.data.frame(mod1df[inTrain,])
+mod1.test <- as.data.frame(mod1df[-inTrain,])
+
+model1 <- lm(mean_delay ~ to + hour + weekday + month, data = (mod1.training))
+
+summary(model1)
+
+mod1.test <-
+  mod1.test %>%
+  mutate(Regression = "Model 1: Calendar Features",
+         Delay.Predict = predict(model1, mod1.test),
+         Delay.Error = Delay.Predict - mean_delay,
+         Delay.AbsError = abs(Delay.Predict - mean_delay),
+         Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
+  
 
 
 
 
 
-summary(model1) %>%
-  coef(.) %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column(.,"Variable") %>%
-  mutate(Odds_Ratio = (exp(Estimate)),
-         across(2:6, round, 2),
-         Odds_Ratio = ifelse(Odds_Ratio >100,"NA",Odds_Ratio)) %>%
-  kable(caption = "Model 1 Odds Ratios") %>%
-  kable_styling("striped", full_width = F)
-
-#model2 line, rush hour, distance from hubs
-model2 <- lm(delay_minutes + 
-
-summary(model2)
-
-summary(model2) %>%
-  coef(.) %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column(.,"Variable") %>%
-  mutate(across(2:5, round, 2)) %>%
-  kable(caption = "Model 2") %>%
-  kable_styling("striped", full_width = F)
+#stargazer(model1, model2,)
 
 #princeon shuttle most efficient, NJ coast least efficient
 #stops add time
