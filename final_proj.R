@@ -185,35 +185,6 @@ njtransit <- weather.Panel %>%
 
 njtransit[is.na(njtransit)] = 0
 
-# Lol, I tried to get the ages, but like 88% of the rows were NAs so clearly something's off
-#njtransit_age <- njtransit %>%
-#  mutate(train_age = ifelse(train_id %in% 500:503, "48",
-#                     ifelse(train_id %in% 1304:1533, "25", 
-#                     ifelse(train_id %in% 1600:1609 | train_id %in% 1700:1760 | train_id %in% 5100:5134 | train_id %in% 5707:5751, "33", 
-#                     ifelse(train_id %in% 4000:4032, "14", 
-#                     ifelse(train_id %in% 4100:4112, "29",
-#                     ifelse(train_id %in% 4113:4129, "22",
-#                     ifelse(train_id %in% 4130:4144, "30",
-#                     ifelse(train_id %in% 4145:4150, "26",
-#                     ifelse(train_id %in% 4184:4189, "30",
-#                     ifelse(train_id == "4190", "30",
-#                     ifelse(train_id %in% 4191:4192, "21",
-#                     ifelse(train_id %in% 4193:4194, "17",             
-#                     ifelse(train_id %in% 4200:4219, "23",
-#                     ifelse(train_id %in% 4300:4303, "52",
-#                     ifelse(train_id %in% 4400:4414, "30",
-#                     ifelse(train_id %in% 4415:4419, "25",
-#                     ifelse(train_id %in% 4420:4431, "23",             
-#                     ifelse(train_id %in% 4600:4628, "18",
-#                     ifelse(train_id %in% 4300:4303, "52",
-#                     ifelse(train_id %in% 5000:5010 | train_id %in% 5200:5205 | train_id %in% 5500:5534 , "29", 
-#                     ifelse(train_id %in% 5155:5169 | train_id %in% 5220:5234, "31", 
-#                     ifelse(train_id %in% 5300:5460, "17", 
-#                     ifelse(train_id %in% 5011:5031 | train_id %in% 5235:5264 | train_id %in% 5535:5582, "24", 
-#                     ifelse(train_id %in% 6000:6083 | train_id %in% 6200:6213 | train_id %in% 6500:6601, "15", 
-#                     ifelse(train_id %in% 7000:7051 | train_id %in% 7200:7298 | train_id %in% 7500:7677, "10", 
-#                     ifelse(train_id %in% 7052:7061 | train_id %in% 7678:7767, "7", NA
-#                           )))))))))))))))))))))))))))
 
 ### Station geometries
 ### Used Long Island ESRI which is recommended for NYC
@@ -300,22 +271,30 @@ features <- c("delay_binary","stop_sequence","hour","week"/"month","dotw"/"weekd
               "Temperature","Precipitation","Wind_Speed")
 
 
-### Ken Questions
+### Recode Weather
 
-#1- Characters or Factors? Depends on GLM or LM?
+### Aggregate
+#Rush not significant
+#Hour is sig
+#Mean dist to NYC sig, but incl_manhattan not sig
 
+x <- njtransit_sf %>%
+  st_drop_geometry() %>%
+  group_by(to, hour,month) %>%
+  summarize(mean_delay = mean(delay_minutes),
+            mean_NYCdist = mean(distNYC))
 
-#2- Time Lag & Spatial Lag - Do we need to do it? Spatial would require tracts joined to stations?
+mod1 <- lm(mean_delay ~ mean_NYCdist, data = x)
+summary(mod1)
 
-
-
-
+group
 
 # --- Modeling ----
-## model 1 binary
-model1 <- glm(delay_binary ~ date + line, 
-              data = njtransit %>%
-                filter(year == "2018"), family = binomial(link="logit"))
+## model 1 kitchen sink
+model1 <- lm(delay_minutes ~ stop_sequence + STATION + line + rush + week + origin + destination + incl_manhattan
+             +incl_hoboken + incl_newark + Temperature + Precipitation + Wind_Speed + distNYC + distHOB + distEWR + distPHL + distSEC, 
+             data = njtransit_sf %>%
+               st_drop_geometry())
 
 summary(model1)
 
@@ -329,10 +308,8 @@ summary(model1) %>%
   kable(caption = "Model 1 Odds Ratios") %>%
   kable_styling("striped", full_width = F)
 
-#model2 continuous
-model2 <- lm(delay_minutes ~ stop_sequence + line, 
-              data = njtransit %>%
-                filter(year == "2018"))
+#model2 line, rush hour, distance from hubs
+model2 <- lm(delay_minutes + 
 
 summary(model2)
 
@@ -346,3 +323,25 @@ summary(model2) %>%
 
 #princeon shuttle most efficient, NJ coast least efficient
 #stops add time
+
+### Test Train Split, MAE, and MAPE
+
+inTrain <- createDataPartition(
+  y = njtransit_sf$delay_minutes, 
+  p = .60, list = FALSE)
+njtransit.training <- njtransit_sf[inTrain,] 
+njtransit.test <- njtransit_sf[-inTrain,]  
+
+
+njtransit.test <-
+  njtransit.test %>%
+  mutate(Regression = "Baseline Regression",
+         Delay.Predict = predict(model1, njtransit.test),
+         Delay.Error = Delay.Predict - delay_minutes,
+         Delay.AbsError = abs(Delay.Predict - delay_minutes),
+         Delay.APE = (abs(Delay.Predict - delay_minutes)) / Delay.Predict)
+  
+
+
+
+
