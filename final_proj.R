@@ -60,6 +60,8 @@ plotTheme <- function(base_size = 12) {
 }
 
 palette5 <- c("#25CB10", "#5AB60C", "#8FA108",   "#C48C04", "#FA7800")
+palette4 <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
+palette2 <- c("#981FAC","#FF006A")
 
 qBr <- function(df, variable, rnd) {
   if (missing(rnd)) {
@@ -273,6 +275,159 @@ features <- c("delay_binary","stop_sequence","hour","week"/"month","dotw"/"weekd
 
 ### Recode Weather
 
+njtransit_sf <- njtransit_sf %>%
+  mutate(weather = case_when(Temperature <=32 & Precipitation < 1 ~ "Freezing",
+                             Temperature <=32 & Precipitation >= 1 ~ "Snow",
+                             Temperature >32 & Temperature <85 & Precipitation >=1 ~ "Rainy",
+                             Temperature >32 & Temperature <85 & Precipitation <1 ~ "Clear",
+                             Temperature >= 85 ~ "Hot"))
+
+
+### Visualizations
+
+mapview::mapview(station_geo)
+
+
+## Hour and Delay Minutes
+#Need a palette 24 lol?
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(hour) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(., aes(hour, mean_delay)) +   
+  geom_bar(position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette2) +
+  scale_x_continuous(breaks=seq(0,23,by=2))+
+  labs(x="Hour", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "Hour") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Rush Hour & Non Rush Hour
+# there's actually no difference at the overall level
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(rush) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(rush, mean_delay, fill=rush)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  scale_fill_manual(values = palette2) +
+  labs(x="Rush Hour", y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Rush Hour") +
+  plotTheme() 
+
+## Weekday?
+# more delays on weekends
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(weekday) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(weekday, mean_delay, fill=weekday)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  scale_fill_manual(values = palette2) +
+  labs(x="Weekday", y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Weekday (1) vs. Weekend (0)") +
+  plotTheme() 
+
+## Month 
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(month) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(., aes(month, mean_delay)) +   
+  geom_bar(position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette2) +
+  scale_x_continuous(breaks=seq(0,12,by=1)) + 
+  labs(x="Month", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "Month") +
+  plotTheme()
+
+## Weather
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(weather) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(weather, mean_delay, fill=weather)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  scale_fill_manual(values = palette5) +
+  labs(x="Weather", y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Weather") +
+  plotTheme()
+
+## include manhattan
+#delay is slightly larger - would be cool to visualize this as 0 no,1 manhattan, 2 hoboken, 3secaucus, etc. 
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(incl_manhattan) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(incl_manhattan, mean_delay, fill=incl_manhattan)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  scale_fill_manual(values = palette2) +
+  labs(x="Includes Manhattan", y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Whether a train includes New York Penn Station") +
+  plotTheme() 
+
+## distance to hubs
+## huge outliers kinda ruin this plot - we could also run these for hoboken, seacaucus, etc. 
+
+njtransit_sf %>%
+  st_drop_geometry() %>%
+  group_by(to) %>%
+  summarize(mean_delay = mean(delay_minutes),
+            mean_NYCdist = mean(distNYC)) %>%
+  ggplot(aes(mean_NYCdist,mean_delay)) +
+  geom_point()+
+  stat_smooth(aes(mean_NYCdist,mean_delay), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800")+
+  plotTheme()
+
+## delay by station - is it consistent?
+# answer - it's not
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(to) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(., aes(to, mean_delay)) +   
+  geom_bar(position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette2) +
+    labs(x="Station", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "by Station") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+## delay by station - top 10 largest offenders
+#palette 10?
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(to) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  arrange(desc(mean_delay)) %>%
+  slice(1:10) %>%
+  ggplot(., aes(x=reorder(to, -mean_delay),y=mean_delay)) +   
+  geom_bar(position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette2) +
+  labs(x="Station", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "Top 10 Stations")+
+    plotTheme()
+
+
+
+
 ### Aggregate
 #Rush not significant
 #Hour is sig
@@ -282,7 +437,8 @@ x <- njtransit_sf %>%
   st_drop_geometry() %>%
   group_by(to, hour,month) %>%
   summarize(mean_delay = mean(delay_minutes),
-            mean_NYCdist = mean(distNYC))
+            mean_NYCdist = mean(distNYC)) %>%
+  arrange(desc(mean_delay))
 
 mod1 <- lm(mean_delay ~ mean_NYCdist, data = x)
 summary(mod1)
@@ -291,12 +447,14 @@ group
 
 # --- Modeling ----
 ## model 1 kitchen sink
-model1 <- lm(delay_minutes ~ stop_sequence + STATION + line + rush + week + origin + destination + incl_manhattan
-             +incl_hoboken + incl_newark + Temperature + Precipitation + Wind_Speed + distNYC + distHOB + distEWR + distPHL + distSEC, 
-             data = njtransit_sf %>%
-               st_drop_geometry())
 
-summary(model1)
+mod1df <- njtransit_sf %>%
+  st_drop_geometry() %>%
+  group_by(to,hour,weekday,month)
+
+
+
+
 
 summary(model1) %>%
   coef(.) %>%
