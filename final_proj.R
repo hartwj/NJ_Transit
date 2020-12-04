@@ -458,17 +458,6 @@ njtransit_sf %>%
 #Hour is sig
 #Mean dist to NYC sig, but incl_manhattan not sig
 
-x <- njtransit_sf %>%
-  st_drop_geometry() %>%
-  group_by(to, hour,month) %>%
-  summarize(mean_delay = mean(delay_minutes),
-            mean_NYCdist = mean(distNYC)) %>%
-  arrange(desc(mean_delay))
-
-mod1 <- lm(mean_delay ~ mean_NYCdist, data = x)
-summary(mod1)
-
-group
 
 # --- Modeling ----
 ## model 1 is station + calendar
@@ -478,14 +467,10 @@ mod1df <- njtransit_sf %>%
   group_by(to,hour,weekday,month) %>%
   summarize(mean_delay = mean(delay_minutes))
 
-mod1df <- mod1df %>%
-  mutate_if(.,is.character, as.factor)
 
 mod1df$to <- as.factor(mod1df$to)
 mod1df$weekday <- as.factor(mod1df$weekday)
 str(mod1df)
-#njtra <- njtransit %>%
-#  mutate_if(., is.character, as.factor)
 
 set.seed(3457)
 
@@ -508,32 +493,104 @@ mod1.test <-
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
   
 
+## Model 2 is station + calendar + weather
+#I tried to just do station + weather but got annoying errors since the df was too small
 
+mod2df <- njtransit_sf %>%
+  st_drop_geometry() %>%
+  group_by(to,hour,weekday,month,weather) %>%
+  summarize(mean_delay = mean(delay_minutes))
 
-
-
-#stargazer(model1, model2,)
-
-#princeon shuttle most efficient, NJ coast least efficient
-#stops add time
-
-### Test Train Split, MAE, and MAPE
+set.seed(3458)
 
 inTrain <- createDataPartition(
-  y = njtransit_sf$delay_minutes, 
+  y = mod2df$mean_delay, 
   p = .60, list = FALSE)
-njtransit.training <- njtransit_sf[inTrain,] 
-njtransit.test <- njtransit_sf[-inTrain,]  
+mod2.training <- as.data.frame(mod2df[inTrain,])
+mod2.test <- as.data.frame(mod2df[-inTrain,])
+
+model2 <- lm(mean_delay ~ to + hour + weekday + month + weather, data = (mod2.training))
+
+mod2.test <-
+  mod2.test %>%
+  mutate(Regression = "Model 2: Calendar + Weather Features",
+         Delay.Predict = predict(model2, mod2.test),
+         Delay.Error = Delay.Predict - mean_delay,
+         Delay.AbsError = abs(Delay.Predict - mean_delay),
+         Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
+
+## Model 3 - Calendar + Weather + Hub Distance
+
+mod3df <- njtransit_sf %>%
+  st_drop_geometry() %>%
+  group_by(to,hour,weekday,month,weather) %>%
+  summarize(mean_delay = mean(delay_minutes),
+            meanNYC = mean(distNYC),
+            meanHOB = mean(distHOB),
+            meanEWR = mean(distEWR),
+            meanPHL = mean(distPHL),
+            meanSEC = mean(distSEC))
+
+set.seed(3459)
+
+inTrain <- createDataPartition(
+  y = mod3df$mean_delay, 
+  p = .60, list = FALSE)
+mod3.training <- as.data.frame(mod3df[inTrain,])
+mod3.test <- as.data.frame(mod3df[-inTrain,])
+
+model3 <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
+               meanHOB + meanEWR + meanPHL + meanSEC, data = (mod3.training))
+
+mod3.test <-
+  mod3.test %>%
+  mutate(Regression = "Model 3: Calendar + Weather + Distance Features",
+         Delay.Predict = predict(model3, mod3.test),
+         Delay.Error = Delay.Predict - mean_delay,
+         Delay.AbsError = abs(Delay.Predict - mean_delay),
+         Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
 
 
-njtransit.test <-
-  njtransit.test %>%
-  mutate(Regression = "Baseline Regression",
-         Delay.Predict = predict(model1, njtransit.test),
-         Delay.Error = Delay.Predict - delay_minutes,
-         Delay.AbsError = abs(Delay.Predict - delay_minutes),
-         Delay.APE = (abs(Delay.Predict - delay_minutes)) / Delay.Predict)
-  
+
+#stargazer(model1, model2,model3)
+
+
+
+### Visualizing Results
+
+allRegressions <- 
+  rbind(
+    dplyr::select(mod1.test, mean_delay,starts_with("Delay"), Regression),
+    dplyr::select(mod2.test, mean_delay,starts_with("Delay"), Regression),
+    dplyr::select(mod3.test, mean_delay,starts_with("Delay"), Regression))
+      
+allRegressions %>%
+  gather(Variable,Value,-Regression) %>%
+  filter(Variable == "Delay.AbsError" | Variable == "Delay.APE") %>%
+  group_by(Regression, Variable) %>%
+  summarize(meanValue = mean(Value, na.rm = T)) %>%
+  spread(Variable, meanValue) %>%
+  kable(caption = "Mean Error by Model") %>%
+  kable_styling("striped", full_width = F)
+
+
+allRegressions %>%
+  dplyr::select(Delay.Predict, mean_delay, Regression) %>%
+  ggplot(aes(mean_delay, Delay.Predict)) +
+  geom_point() +
+  stat_smooth(aes(mean_delay, mean_delay), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(Delay.Predict, mean_delay), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted average station delay as a function of observed delays",
+       subtitle="Orange line represents a perfect prediction; Green line represents actual prediction") +
+  plotTheme()
+
+
+
+
+
 
 
 
