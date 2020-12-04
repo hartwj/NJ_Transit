@@ -158,12 +158,6 @@ njtransit <- njtransit %>%
 # Weather Feature
 weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-18")
 
-#Trying to fix the weather NA issue: create table with every single hour
-#weather.Features <- data.table(interval60 = )
-#start <- ymd_hms("2018-03-01 00:00:00")
-#end <- ymd_hms("2020-05-18 23:00:00")
-#interval(end, start)
-
 ## Plot Newark weather data
 weather.Panel <-  
   weather.Data %>%
@@ -216,8 +210,11 @@ station_geo <- station_geo %>%
     to_id = ifelse(to_id=="168", "38187", to_id),
     to_id = ifelse(to_id=="166", "38105", to_id),
     to_id = ifelse(to_id=="172", "39635", to_id),
-    to_id = ifelse(STATION=="Wesmont", "43599", to_id)
-  )
+    to_id = ifelse(STATION=="Wesmont", "43599", to_id))
+
+station_geo <- station_geo %>%
+  mutate(
+    Lines = ifelse(RAIL_LINE != "Main/Bergen Line" & str_detect(RAIL_LINE, "/"), NA, RAIL_LINE))
 
 #merge station geos to njtransit
 njtransit_sf <- station_geo %>%
@@ -259,45 +256,49 @@ njtransit_sf <- njtransit_sf %>%
 
 # --- Exploratory Analysis ----
 # Plot weather features
-grid.arrange(top = "Weather Data - Newark - Mar 2018 to May 2020",
-             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
-               labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
-               labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
-               labs(title="Temperature", x="Hour", y="Temperature") + plotTheme())
-
-# Run correlations btwn delay_binary and features
-features <- c("delay_binary","stop_sequence","hour","week"/"month","dotw"/"weekday","rush",
-              "incl_manhattan","incl_hoboken","incl_newark",
-              "Temperature","Precipitation","Wind_Speed")
-
+weather.Panel18 <- weather.Panel %>%
+  filter(interval60 >= "2018-03-01 00:00:00" & interval60 <= "2018-12-31 23:00:00")
+weather.Panel19 <- weather.Panel %>%
+  filter(interval60 >= "2019-01-01 00:00:00" & interval60 <= "2019-12-31 23:00:00")
+weather.Panel20 <- weather.Panel %>%
+  filter(interval60 >= "2020-01-01 00:00:00" & interval60 <= "2020-05-18 23:00:00")
 
 ### Recode Weather
-
 njtransit_sf <- njtransit_sf %>%
   mutate(weather = case_when(Temperature <=32 & Precipitation < 1 ~ "Freezing",
                              Temperature <=32 & Precipitation >= 1 ~ "Snow",
                              Temperature >32 & Temperature <85 & Precipitation >=1 ~ "Rainy",
                              Temperature >32 & Temperature <85 & Precipitation <1 ~ "Clear",
-                             Temperature >= 85 ~ "Hot"))
+                             Temperature >= 85 ~ "Hot"),
+         snow = ifelse(Temperature <=32 & Precipitation >= 1, "1", "0"))
 
+# --- Visualizations ----
+# Run correlations btwn delay_binary and features
+features <- c("delay_binary","stop_sequence","hour","month","weekday","rush",
+              "incl_manhattan","incl_hoboken","incl_newark",
+              "Temperature","Precipitation","Wind_Speed")
 
-### Visualizations
+grid.arrange(top = "Weather Data - Newark - 2019",
+             ggplot(weather.Panel19, aes(interval60,Precipitation)) + geom_line() + 
+               labs(title="Precipitation", x="Day", y="Precipitation") + plotTheme(),
+             ggplot(weather.Panel19, aes(interval60,Wind_Speed)) + geom_line() + 
+               labs(title="Wind Speed", x="Day", y="Wind Speed") + plotTheme(),
+             ggplot(weather.Panel19, aes(interval60,Temperature)) + geom_line() + 
+               labs(title="Temperature", x="Day", y="Temperature") + plotTheme())
 
-mapview::mapview(station_geo)
-
+mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
 
 ## Hour and Delay Minutes
 #Need a palette 24 lol?
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(hour) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(., aes(hour, mean_delay)) +   
-  geom_bar(position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette2) +
+  mutate(rush = ifelse(hour<10 & hour>=6,"1",
+                ifelse(hour<20 & hour>=16,"1","0"))) %>%
+  ggplot(., aes(x=hour, y=mean_delay)) +   
+  geom_bar(aes(fill = rush), position = "dodge", stat="identity") +
+  scale_fill_manual(values = c("gray","gold")) +
   scale_x_continuous(breaks=seq(0,23,by=2))+
   labs(x="Hour", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
@@ -306,14 +307,13 @@ njtransit_sf %>%
 
 ## Rush Hour & Non Rush Hour
 # there's actually no difference at the overall level
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(rush) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   ggplot(aes(rush, mean_delay, fill=rush)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = palette2) +
+  scale_fill_manual(values = c("gray","gold")) +
   labs(x="Rush Hour", y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
        subtitle = "Rush Hour") +
@@ -321,26 +321,32 @@ njtransit_sf %>%
 
 ## Weekday?
 # more delays on weekends
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(weekday) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   ggplot(aes(weekday, mean_delay, fill=weekday)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = palette2) +
+  scale_fill_manual(values = c("gray","gold")) +
   labs(x="Weekday", y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
        subtitle = "Weekday (1) vs. Weekend (0)") +
   plotTheme() 
 
 ## Day of the week?
-
-
-
+njtransit_sf %>%
+  st_drop_geometry %>%
+  group_by(dotw) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(dotw, mean_delay, fill="blue")) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  labs(y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Days of the week from Mon (1) to Sun (7)") +
+  scale_x_discrete(name = "Day of the Week", limits =c('1','2','3','4','5','6','7')) +
+  plotTheme() 
 
 ## Month 
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(month) %>%
