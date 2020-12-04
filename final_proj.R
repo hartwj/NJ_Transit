@@ -276,7 +276,7 @@ njtransit_sf <- njtransit_sf %>%
 # Run correlations btwn delay_binary and features
 features <- c("delay_binary","stop_sequence","hour","month","weekday","rush",
               "incl_manhattan","incl_hoboken","incl_newark",
-              "Temperature","Precipitation","Wind_Speed")
+              "weather","snow")
 
 grid.arrange(top = "Weather Data - Newark - 2019",
              ggplot(weather.Panel19, aes(interval60,Precipitation)) + geom_line() + 
@@ -287,6 +287,14 @@ grid.arrange(top = "Weather Data - Newark - 2019",
                labs(title="Temperature", x="Day", y="Temperature") + plotTheme())
 
 mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
+
+njtransit_sf %>%
+  st_drop_geometry %>%
+  filter(delay_minutes >= '10') %>%
+  ggplot(., aes(x=date, y=delay_minutes)) +   
+    geom_point() + 
+    labs(x="Date", y="Delay Length (minutes)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## Hour and Delay Minutes
 #Need a palette 24 lol?
@@ -338,7 +346,7 @@ njtransit_sf %>%
   st_drop_geometry %>%
   group_by(dotw) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(dotw, mean_delay, fill="blue")) + 
+  ggplot(aes(dotw, mean_delay)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
   labs(y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
@@ -353,7 +361,7 @@ njtransit_sf %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   ggplot(., aes(month, mean_delay)) +   
   geom_bar(position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette2) +
+  scale_fill_manual(values = palette5) +
   scale_x_continuous(breaks=seq(0,12,by=1)) + 
   labs(x="Month", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
@@ -361,7 +369,6 @@ njtransit_sf %>%
   plotTheme()
 
 ## Weather
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(weather) %>%
@@ -382,7 +389,6 @@ njtransit_sf %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   ggplot(aes(incl_manhattan, mean_delay, fill=incl_manhattan)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = palette2) +
   labs(x="Includes Manhattan", y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
        subtitle = "Whether a train includes New York Penn Station") +
