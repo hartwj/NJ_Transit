@@ -276,22 +276,30 @@ njtransit_sf <- njtransit_sf %>%
 # Run correlations btwn delay_binary and features
 features <- c("delay_binary","stop_sequence","hour","month","weekday","rush",
               "incl_manhattan","incl_hoboken","incl_newark",
-              "Temperature","Precipitation","Wind_Speed")
+              "weather","snow")
 
 grid.arrange(top = "Weather Data - Newark - 2019",
-             ggplot(weather.Panel19, aes(interval60,Precipitation)) + geom_line() + 
+             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
                labs(title="Precipitation", x="Day", y="Precipitation") + plotTheme(),
-             ggplot(weather.Panel19, aes(interval60,Wind_Speed)) + geom_line() + 
+             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
                labs(title="Wind Speed", x="Day", y="Wind Speed") + plotTheme(),
-             ggplot(weather.Panel19, aes(interval60,Temperature)) + geom_line() + 
+             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
                labs(title="Temperature", x="Day", y="Temperature") + plotTheme())
 
-mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
+ggplot(weather.Panel, aes(interval60,Temperature)) + 
+  geom_line() + 
+  geom_hline(yintercept=32, color="#64a6f1", size = 2) +
+  geom_hline(yintercept=85, color="#f27a60", size = 2) +
+  labs(title="Temperature (F)", x="Day", y="Temperature") + 
+    plotTheme()
+  
+stations <- mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
 
 ## Hour and Delay Minutes
 #Need a palette 24 lol?
 njtransit_sf %>%
   st_drop_geometry %>%
+  filter(weekday==1) %>%
   group_by(hour) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   mutate(rush = ifelse(hour<10 & hour>=6,"1",
@@ -338,7 +346,7 @@ njtransit_sf %>%
   st_drop_geometry %>%
   group_by(dotw) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(dotw, mean_delay, fill="blue")) + 
+  ggplot(aes(dotw, mean_delay)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
   labs(y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
@@ -353,7 +361,7 @@ njtransit_sf %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
   ggplot(., aes(month, mean_delay)) +   
   geom_bar(position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette2) +
+  scale_fill_manual(values = palette5) +
   scale_x_continuous(breaks=seq(0,12,by=1)) + 
   labs(x="Month", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
@@ -361,7 +369,6 @@ njtransit_sf %>%
   plotTheme()
 
 ## Weather
-
 njtransit_sf %>%
   st_drop_geometry %>%
   group_by(weather) %>%
@@ -380,12 +387,11 @@ njtransit_sf %>%
   st_drop_geometry %>%
   group_by(incl_manhattan) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(incl_manhattan, mean_delay, fill=incl_manhattan)) + 
+  ggplot(aes(incl_manhattan, mean_delay, fill=incl_philly)) + 
   geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = palette2) +
   labs(x="Includes Manhattan", y="Average Delay (minutes)", 
        title = "Feature associations with train delay",
-       subtitle = "Whether a train includes New York Penn Station") +
+       subtitle = "Whether a train includes Philly's Suburban Station") +
   plotTheme() 
 
 ## distance to hubs
@@ -429,20 +435,13 @@ njtransit_sf %>%
   arrange(desc(mean_delay)) %>%
   slice(1:10) %>%
   ggplot(., aes(x=reorder(to, -mean_delay),y=mean_delay)) +   
-  geom_bar(position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette2) +
+  geom_bar(aes(fill=to), position = "dodge", stat="identity") +
+  scale_fill_manual(values = c("#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","gray")) +
   labs(x="Station", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
-       subtitle = "Top 10 Stations")+
-    plotTheme()
-
-
-
-
-
-
-
-
+       subtitle = "Top 10 Stations") + 
+  plotTheme() +
+  theme(legend.position = "none")
 
 
 
