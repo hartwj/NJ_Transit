@@ -482,12 +482,17 @@ mod1.test <- as.data.frame(mod1df[-inTrain,])
 
 model1 <- lm(mean_delay ~ to + hour + weekday + month, data = (mod1.training))
 
+#cooks distance lowers abs error and APE
+mod1.training$cd <- cooks.distance(model1)
+
+model1b <- lm(mean_delay ~ to + hour + weekday + month, data = subset(mod1.training, cd<= 4/43135))
+
 summary(model1)
 
 mod1.test <-
   mod1.test %>%
   mutate(Regression = "Model 1: Calendar Features",
-         Delay.Predict = predict(model1, mod1.test),
+         Delay.Predict = predict(model1b, mod1.test),
          Delay.Error = Delay.Predict - mean_delay,
          Delay.AbsError = abs(Delay.Predict - mean_delay),
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
@@ -498,7 +503,7 @@ mod1.test <-
 
 mod2df <- njtransit_sf %>%
   st_drop_geometry() %>%
-  group_by(to,hour,weekday,month,weather) %>%
+  group_by(to,hour,weekday,month,snow) %>%
   summarize(mean_delay = mean(delay_minutes))
 
 set.seed(3458)
@@ -509,12 +514,16 @@ inTrain <- createDataPartition(
 mod2.training <- as.data.frame(mod2df[inTrain,])
 mod2.test <- as.data.frame(mod2df[-inTrain,])
 
-model2 <- lm(mean_delay ~ to + hour + weekday + month + weather, data = (mod2.training))
+model2 <- lm(mean_delay ~ to + hour + weekday + month + snow, data = (mod2.training))
+
+mod2.training$cd <- cooks.distance(model2)
+
+model2b <- lm(mean_delay ~ to + hour + weekday + month + snow, data = subset(mod2.training, cd<= 4/84524))
 
 mod2.test <-
   mod2.test %>%
   mutate(Regression = "Model 2: Calendar + Weather Features",
-         Delay.Predict = predict(model2, mod2.test),
+         Delay.Predict = predict(model2b, mod2.test),
          Delay.Error = Delay.Predict - mean_delay,
          Delay.AbsError = abs(Delay.Predict - mean_delay),
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
@@ -542,10 +551,17 @@ mod3.test <- as.data.frame(mod3df[-inTrain,])
 model3 <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
                meanHOB + meanEWR + meanPHL + meanSEC, data = (mod3.training))
 
+mod3.training$cd <- cooks.distance(model3)
+
+model3b <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
+                meanHOB + meanEWR + meanPHL + meanSEC, data = subset(mod3.training, cd<= 4/84524))
+
+
+
 mod3.test <-
   mod3.test %>%
   mutate(Regression = "Model 3: Calendar + Weather + Distance Features",
-         Delay.Predict = predict(model3, mod3.test),
+         Delay.Predict = predict(model3b, mod3.test),
          Delay.Error = Delay.Predict - mean_delay,
          Delay.AbsError = abs(Delay.Predict - mean_delay),
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
@@ -583,6 +599,7 @@ allRegressions %>%
   stat_smooth(aes(Delay.Predict, mean_delay), 
               method = "lm", se = FALSE, size = 1, colour="#25CB10") +
   facet_wrap(~Regression) +
+  ylim(0,50)+
   labs(title="Predicted average station delay as a function of observed delays",
        subtitle="Orange line represents a perfect prediction; Green line represents actual prediction") +
   plotTheme()
