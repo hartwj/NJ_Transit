@@ -452,10 +452,16 @@ njtransit_sf %>%
 
 
 
-### Aggregate
-#Rush not significant
-#Hour is sig
-#Mean dist to NYC sig, but incl_manhattan not sig
+### Modeling
+
+#The goal of this next step was to build a model that accurately predicts average station delay
+#minimizing absolute error and absolute percent error. At each stage we removed outliers based on
+#Cook's Distance which improved our error metrics. Importantly, our data was aggregated at the station-level for our use case.
+#We used a simple 60/40 train/test split on the aggregated data. Each model has its own unique dataset with increase observations for increasing features.
+#Model performance was based on out of fold test set predictions.
+#`Model 1` looks solely at calendar features, while `Model 2` looks at calendar and weather features, and `Model 3` examines calendar, weather, and geographic
+#features. `Model 1` had the lowest absolute error and absolute percent error, but `Model 3` was recommended for the dashboard,
+#given that it is more customizable. 
 
 
 # --- Modeling ----
@@ -498,7 +504,6 @@ mod1.test <-
   
 
 ## Model 2 is station + calendar + weather
-#I tried to just do station + weather but got annoying errors since the df was too small
 
 mod2df <- njtransit_sf %>%
   st_drop_geometry() %>%
@@ -556,7 +561,6 @@ model3b <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
                 meanHOB + meanEWR + meanPHL + meanSEC, data = subset(mod3.training, cd<= 4/84524))
 
 
-
 mod3.test <-
   mod3.test %>%
   mutate(Regression = "Model 3: Calendar + Weather + Distance Features",
@@ -565,9 +569,6 @@ mod3.test <-
          Delay.AbsError = abs(Delay.Predict - mean_delay),
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
 
-
-
-#stargazer(model1, model2,model3)
 
 
 
