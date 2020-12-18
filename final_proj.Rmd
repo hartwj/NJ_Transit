@@ -1,8 +1,28 @@
-### NJ Transit - MUSA Final Project
-x <- njtransit[rowSums(is.na(njtransit)) > 0,]
-njtransit <- njtransit %>% select(-Temperature, -Precipitation, -Wind_Speed)
+---
+title: "MUSA508 Final Project: NJ Transit Delay Prediction"
+author: "Juliana Zhou & Julian Hartwell"
+date: "December 14, 2020"
+output: 
+  html_document:
+    code_folding: "hide"
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
 
-# --- Setup: Libraries ----
+# Introduction
+Train delays can be expensive and disruptive events. As the transportation system with the second highest ridership in the country, delays on NJ Transit lines can be particularly disruptive. Unfortunately NJ Transit is also particularly beleaguered by delays, in part due to the advanced average age of its rolling stock. In this analysis, we hope to predict significant train delays within the NJ Transit system. The use case is to build a dashboard meant to assist senior executives making resource distribution decisions (e.g., engineer staffing, train repair scheduling). In the future, with this applied analysis, NJ Transit could hypothetically determine which stations are likely to experience significant delays and have mechanics and shuttle busses on standby to address delays without inconveniencing commuters.
+
+
+# Setup:
+```{r setup, results='hide', message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  comment = NA,
+	message = FALSE,
+	warning = FALSE)# --- Setup: Libraries ----
 # create notin operator
 `%notin%` <- Negate(`%in%`)
 
@@ -11,13 +31,12 @@ options(scipen=999)
 
 ## Download + Load Packages
 pckgs <- c("tidyverse", "kableExtra", "readr", "ggplot2", "lubridate","sf",
-           "riem","tigris", "gganimate","gridExtra","knitr","tidyr","caret")
+           "riem","tigris", "gganimate","gridExtra","knitr","tidyr","caret","viridis")
 
 if (any(pckgs %notin% rownames(installed.packages())==TRUE)){
   install.packages(pckgs, repos = c(CRAN = "http://cloud.r-project.org"))}
 
 lapply(pckgs, FUN = require, character.only = TRUE)
-
 
 # --- Setup: Aesthetics & Functions ----
 mapTheme <- function(base_size = 12) {
@@ -95,7 +114,15 @@ nn_function <- function(measureFrom,measureTo,k) {
   
   return(output)  
 }
+```
 
+# Data
+
+The data used in this analysis came from the  [Kaggle NJ Transit + Amtrak (NEC) Rail Performance](https://www.kaggle.com/pranavbadami/nj-transit-amtrak-nec-performance) data. Amtrak data was removed for the specifics of this project. Train delay data are captured in separate .csv files by month, from March 2018 to May 2020. In addition to timecodes, the data also contain information on the train ID, departure station, destination station, line, and length of day in minutes of each delay event.
+
+Using these variables, features for rush hour, weekday/weekend, and line origin and final destination stations are also created. Using these features, inclusion features for major hubs along the affected line (i.e., New York Penn Station, Hoboken, Newark) are also determined.
+
+```{r data, message=FALSE, warning=FALSE}
 # --- Data ----
 ### Read in CSV files
 
@@ -147,13 +174,17 @@ njtransit <- njtransit %>%
 
 # Includes Manhattan Feature % Line dummies
 njtransit <- njtransit %>%
-  mutate(incl_hub = ifelse(origin == "New York Penn Station","1",
-                    ifelse(destination == "New York Penn Station","1",
-                    ifelse(origin == "Hoboken","2",
-                    ifelse(destination == "Hoboken","2",
-                    ifelse(origin == "Newark Penn Station","3",
-                    ifelse(destination == "Newark Penn Station","3","0")))))))
+  mutate(incl_manhattan = ifelse(origin == "New York Penn Station","1",ifelse(destination == "New York Penn Station","1","0")),
+         incl_hoboken = ifelse(origin == "Hoboken","1",ifelse(destination == "Hoboken","1","0")),
+         incl_newark = ifelse(origin == "Newark Penn Station","1",ifelse(destination == "Newark Penn Station","1","0")))
 
+```
+
+## Weather & Geographies
+
+Once preliminary features are created, weather information and station geographies are also added. Weather data is taken from a weather station at Newark Airport, and ArcGIS Open Data is used for station geographies.
+
+```{r weather, results='hide', message=FALSE, warning=FALSE}
 # Weather Feature
 weather.Data <- riem_measures(station = "EWR", date_start = "2018-03-01", date_end = "2020-05-18")
 
@@ -191,7 +222,7 @@ station_geo <- st_read("https://opendata.arcgis.com/datasets/acf1aa71053f4bb48a1
 station_geo$ATIS_ID <- gsub("RAIL","",station_geo$ATIS_ID) 
 station_geo$ATIS_ID <- sub("^0+", "", station_geo$ATIS_ID)
 
-## recode non matching IDs - thank you NJTransit
+## Recode non-matching IDs
 njtransit$to_id <- as.character(njtransit$to_id)
 
 station_geo$to_id <- station_geo$ATIS_ID
@@ -215,7 +246,7 @@ station_geo <- station_geo %>%
   mutate(
     Lines = ifelse(RAIL_LINE != "Main/Bergen Line" & str_detect(RAIL_LINE, "/"), NA, RAIL_LINE))
 
-#merge station geos to njtransit
+# Merge station geographies to njtransit
 njtransit_sf <- station_geo %>%
   st_drop_geometry() %>%
   select(LATITUDE, LONGITUDE,STATION,to_id) %>%
@@ -234,9 +265,6 @@ hub.hoboken <-
   filter(station_geo, STATION == "Hoboken Terminal") %>%
   slice(n()) %>%
   st_centroid()
-hub.philly <-
-  filter(station_geo, STATION == "Suburban Station") %>%
-  st_centroid()
 hub.newark <-
   filter(station_geo, STATION == "Newark Penn Station") %>%
   slice(n()) %>%
@@ -251,155 +279,82 @@ njtransit_sf <- njtransit_sf %>%
          distEWR =  as.numeric(st_distance(njtransit_sf,hub.newark)),
          distSEC =  as.numeric(st_distance(njtransit_sf,hub.secaucus)))
   
+```
 
-# --- Exploratory Analysis ----
-# Plot weather features
-weather.Panel18 <- weather.Panel %>%
-  filter(interval60 >= "2018-03-01 00:00:00" & interval60 <= "2018-12-31 23:00:00")
-weather.Panel19 <- weather.Panel %>%
-  filter(interval60 >= "2019-01-01 00:00:00" & interval60 <= "2019-12-31 23:00:00")
-weather.Panel20 <- weather.Panel %>%
-  filter(interval60 >= "2020-01-01 00:00:00" & interval60 <= "2020-05-18 23:00:00")
+# Exploratory Analyses
 
-### Recode Weather
-njtransit_sf <- njtransit_sf %>%
-  mutate(weather = case_when(Temperature <=32 & Precipitation < 1 ~ "Freezing",
-                             Temperature <=32 & Precipitation >= 1 ~ "Snow",
-                             Temperature >32 & Temperature <85 & Precipitation >=1 ~ "Rainy",
-                             Temperature >32 & Temperature <85 & Precipitation <1 ~ "Clear",
-                             Temperature >= 85 ~ "Hot"),
-         snow = ifelse(Temperature <=32 & Precipitation >= 1, "1", "0"))
+To understand the features that affect delays, we did some preliminary analyses to understand how station, weather, and time associate with significant delays.
 
+After looking at average delay by station, we find that all of the stations on the Atlantic City Line how significantly longer average delays than other lines or stations. As it is a clear outlier (spatially), we elected to exclude it from the analysis.
+
+```{r station explo, message=FALSE, warning=FALSE}
 # --- Visualizations ----
-# Run correlations btwn delay_binary and features
-features <- c("delay_binary","stop_sequence","hour","month","weekday","rush",
-              "incl_manhattan","incl_hoboken","incl_newark",
-              "weather","snow")
+# mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
 
-grid.arrange(top = "Weather Data - Newark - 2019",
-             ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
-               labs(title="Precipitation", x="Day", y="Precipitation") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
-               labs(title="Wind Speed", x="Day", y="Wind Speed") + plotTheme(),
-             ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
-               labs(title="Temperature", x="Day", y="Temperature") + plotTheme())
-
-ggplot(weather.Panel, aes(interval60,Temperature)) + 
-  geom_line() + 
-  geom_hline(yintercept=32, color="#64a6f1", size = 2) +
-  geom_hline(yintercept=85, color="#f27a60", size = 2) +
-  labs(title="Temperature (F)", x="Day", y="Temperature") + 
-    plotTheme()
-
-njtransit_sf.clean %>%
-  st_drop_geometry() %>%
-  group_by(Temperature) %>%
-  summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(Temperature,mean_delay)) +
-  geom_point()+
-  stat_smooth(aes(Temperature,mean_delay), 
-              method = "lm", se = FALSE, size = 1, colour="#FA7800")+
-  labs(x="Temperature", y="Avg. Delay (min)") +
-  plotTheme()
-  
-stations <- mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
-stations
-## Hour and Delay Minutes
-#Need a palette 24 lol?
+## Delay by station - is it consistent?
 njtransit_sf %>%
   st_drop_geometry %>%
-  filter(weekday==1) %>%
-  group_by(hour) %>%
+  group_by(to) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  mutate(rush = ifelse(hour<10 & hour>=6,"1",
-                ifelse(hour<20 & hour>=16,"1","0"))) %>%
-  ggplot(., aes(x=hour, y=mean_delay)) +   
-  geom_bar(aes(fill = rush), position = "dodge", stat="identity") +
-  scale_fill_manual(values = c("gray","gold"),
-                    labels= c("Off-Peak","Rush Hour")) +
-  scale_x_continuous(breaks=seq(0,23,by=2))+
-  labs(x="Hour", y="Average Delay (minutes)",
-       title = "Feature associations with the train delays",
-       subtitle = "Hour") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-## Rush Hour & Non Rush Hour
-# there's actually no difference at the overall level
-njtransit_sf %>%
-  st_drop_geometry %>%
-  group_by(rush) %>%
-  summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(rush, mean_delay, fill=rush)) + 
-  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = c("gray","gold")) +
-  labs(x="Rush Hour", y="Average Delay (minutes)", 
-       title = "Feature associations with train delay",
-       subtitle = "Rush Hour") +
-  plotTheme() 
-
-## Day of the week?
-njtransit_sf %>%
-  st_drop_geometry %>%
-  group_by(dotw) %>%
-  summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(dotw, mean_delay)) + 
-  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  labs(y="Average Delay (minutes)", 
-       title = "Feature associations with train delay",
-       subtitle = "Days of the week from Mon (1) to Sun (7)") +
-  scale_x_discrete(name = "Day of the Week", limits =c('1','2','3','4','5','6','7')) +
-  plotTheme() 
-
-## Month 
-njtransit_sf %>%
-  st_drop_geometry %>%
-  group_by(month) %>%
-  summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(., aes(month, mean_delay)) +   
+  ggplot(., aes(to, mean_delay)) +   
   geom_bar(position = "dodge", stat="identity") +
-  scale_x_continuous(breaks=seq(0,12,by=1)) + 
-  labs(x="Month", y="Average Delay (minutes)",
+  scale_fill_manual(values = palette2) +
+    labs(x="Station", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
-       subtitle = "Month") +
-  plotTheme()
+       subtitle = "by Station") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
 
-## Weather
+## Delay by station - top 10 largest offenders
 njtransit_sf %>%
   st_drop_geometry %>%
-  group_by(weather) %>%
+  group_by(to) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(weather, mean_delay, fill=weather)) + 
-  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  scale_fill_manual(values = palette5) +
-  labs(x="Weather", y="Average Delay (minutes)", 
-       title = "Feature associations with train delay",
-       subtitle = "Weather") +
+  arrange(desc(mean_delay)) %>%
+  slice(1:10) %>%
+  ggplot(., aes(x=reorder(to, -mean_delay),y=mean_delay)) +   
+  geom_bar(aes(fill=to), position = "dodge", stat="identity") +
+  scale_fill_manual(values = c("#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","gray")) +
+  labs(x="Station", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "Top 10 Stations") + 
+  plotTheme() +
+  theme(legend.position = "none")
+
+njtransit_sf.clean <- njtransit_sf %>%
+  filter(line!="Atl. City Line")
+
+```
+
+## Spatial Process
+
+Next, we look at how distance from major transportation hubs like New York Penn Station, Hoboken, Secaucus, and Newark affects average delay. 
+
+Our models employ a spatial element that relates the x,y coordinates of each station and their distance to various high-traffic hubs. We hypothesized that busy hubs, like NY Penn Station, Newark Penn Station, Hoboken, etc. would cause inbound and outbound delays. We used `st_distance` to evaluate the distance to each station in meters. This feature was included in our final models. 
+```{r spatial, results='hide', message=FALSE, warning=FALSE}
+njCounties <- 
+  st_read("https://opendata.arcgis.com/datasets/5f45e1ece6e14ef5866974a7b57d3b95_1.geojson") %>%
+  st_transform('ESRI:102318') 
+
+stations <- njtransit_sf.clean %>%
+  group_by(to) %>%
+  summarize(mean_delay = mean(delay_minutes)) 
+
+```
+
+```{r hub explo, message=FALSE, warning=FALSE}
+## Delay Map
+ggplot() +
+  geom_sf(data = njCounties) +
+  geom_sf(data = stations, aes(color=mean_delay),
+          size=1, show.legend = "point") +
+  labs(title= "Delays by station") +
+  scale_color_viridis(direction=-1) +
   plotTheme()
 
-njtransit_sf <- njtransit_sf %>%
-  mutate(incl_hub = ifelse(origin == "New York Penn Station","1",
-                    ifelse(destination == "New York Penn Station","1",
-                    ifelse(origin == "Hoboken","2",
-                    ifelse(destination == "Hoboken","2",
-                    ifelse(origin == "Newark Penn Station","3",
-                    ifelse(destination == "Newark Penn Station","3",
-                    ifelse(origin == "Newark Penn Station","3",
-                    ifelse(destination == "Newark Penn Station","3","0")))))))))
-
-## njtransit_sf %>%
-  st_drop_geometry %>%
-  group_by(incl_hub) %>%
-  summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(incl_hub, mean_delay, fill=incl_hub)) + 
-  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
-  labs(x="Includes Manhattan", y="Average Delay (minutes)", 
-       title = "Feature associations with train delay",
-       subtitle = "Whether a train includes Philly's Suburban Station") +
-  scale_fill_discrete(labels = c("No hub", "New York","Hoboken","Newark")) +
-  plotTheme() 
-
-  
-## Distance to NYC
+## Distance to Hubs
+### Distance to NYC
 a <- njtransit_sf.clean %>%
   st_drop_geometry() %>%
   group_by(to) %>%
@@ -422,7 +377,7 @@ b <- njtransit_sf.clean %>%
   geom_point()+
   stat_smooth(aes(mean_HOBdist,mean_delay), 
               method = "lm", se = FALSE, size = 1, colour="#FA7800")+
-  labs(x="Distance from Hovoken", y="Avg. Delay (min)") +
+  labs(x="Distance from Hoboken", y="Avg. Delay (min)") +
   plotTheme()
 
 ## Distance to Newark
@@ -454,66 +409,120 @@ d <- njtransit_sf.clean %>%
 grid.arrange(top = "Delay by Distance from Major Hubs",
              a,b,c,d, layout_matrix = rbind(c(1,2),c(3,4)))
 
-## delay by station - is it consistent?
-# answer - it's not
+```
 
-njtransit_sf %>%
+## Time Lag
+There are no time lag features, however we converted our time stamps to calendar features such as hour, month, weekday, etc. 
+
+Finally, looking at time, we considered hour of the day (including rush hour effect), day of the week, and month. The evening rush hour appears to cause greater delays than the morning rush hour, through the week, Saturdays appear to have slightly longer average delays, and average delays are greatest during the last two months of the year.
+
+```{r time explo, message=FALSE, warning=FALSE}
+
+## Delays by Hours & Rush Hour on Weekdays
+njtransit_sf.clean %>%
   st_drop_geometry %>%
-  group_by(to) %>%
+  filter(weekday==1) %>%
+  group_by(hour) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  ggplot(., aes(to, mean_delay)) +   
+  mutate(rush = ifelse(hour<10 & hour>=6,"1",
+                ifelse(hour<20 & hour>=16,"1","0"))) %>%
+  ggplot(., aes(x=hour, y=mean_delay)) +   
+  geom_bar(aes(fill = rush), position = "dodge", stat="identity") +
+  scale_fill_manual(values = c("gray","gold"),
+                    labels= c("Off-Peak","Rush Hour")) +
+  scale_x_continuous(breaks=seq(0,23,by=2))+
+  labs(x="Hour", y="Average Delay (minutes)",
+       title = "Feature associations with the train delays",
+       subtitle = "Hour") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Day of the Week: More delays on Saturday
+njtransit_sf.clean %>%
+  st_drop_geometry %>%
+  group_by(dotw) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(dotw, mean_delay)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  labs(y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Days of the week from Mon (1) to Sun (7)") +
+  scale_x_discrete(name = "Day of the Week", limits =c('1','2','3','4','5','6','7')) +
+  plotTheme() 
+
+## Month 
+njtransit_sf.clean %>%
+  st_drop_geometry %>%
+  group_by(month) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(., aes(month, mean_delay)) +   
   geom_bar(position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette2) +
-    labs(x="Station", y="Average Delay (minutes)",
+  scale_fill_manual(values = palette5) +
+  scale_x_continuous(breaks=seq(0,12,by=1)) + 
+  labs(x="Month", y="Average Delay (minutes)",
        title = "Feature associations with the train delays",
-       subtitle = "by Station") +
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
+       subtitle = "Month from January (1) to December (12)") +
+  plotTheme()
 
-## delay by station - top 10 largest offenders
-#palette 10?
 
-njtransit_sf %>%
-  st_drop_geometry %>%
-  group_by(to) %>%
+```
+
+## Weather Features
+After finding no clear association between temperature and average delays, we recoded the weather features into four categories: freezing, snow rainy, and clear. Finding only one weather type significantly contributing to delays, we elected to only include snow in our analysis.
+
+```{r weather explo, message=FALSE, warning=FALSE}
+
+njtransit_sf.clean %>%
+  st_drop_geometry() %>%
+  group_by(Temperature) %>%
   summarize(mean_delay = mean(delay_minutes)) %>%
-  arrange(desc(mean_delay)) %>%
-  slice(1:10) %>%
-  ggplot(., aes(x=reorder(to, -mean_delay),y=mean_delay)) +   
-  geom_bar(aes(fill=to), position = "dodge", stat="identity") +
-  scale_fill_manual(values = c("#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","#64a6f1","gray")) +
-  labs(x="Station", y="Average Delay (minutes)",
-       title = "Feature associations with the train delays",
-       subtitle = "Top 10 Stations") + 
-  plotTheme() +
-  theme(legend.position = "none")
+  ggplot(aes(Temperature,mean_delay)) +
+  geom_point()+
+  stat_smooth(aes(Temperature,mean_delay), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800")+
+  labs(x="Temperature", y="Avg. Delay (min)") +
+  plotTheme()
 
+### Recode Weather
+njtransit_sf.clean <- njtransit_sf.clean %>%
+  mutate(weather = case_when(Temperature <=32 & Precipitation < 1 ~ "Freezing",
+                             Temperature <=32 & Precipitation >= 1 ~ "Snow",
+                             Temperature >32 & Temperature <85 & Precipitation >=1 ~ "Rainy",
+                             Temperature >32 & Temperature <85 & Precipitation <1 ~ "Clear",
+                             Temperature >= 85 ~ "Hot"),
+         snow = ifelse(Temperature <=32 & Precipitation >= 1, "1", "0"))
 
+njtransit_sf.clean %>%
+  st_drop_geometry %>%
+  group_by(weather) %>%
+  summarize(mean_delay = mean(delay_minutes)) %>%
+  ggplot(aes(weather, mean_delay, fill=weather)) + 
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") + 
+  scale_fill_manual(values = palette5) +
+  labs(x="Weather", y="Average Delay (minutes)", 
+       title = "Feature associations with train delay",
+       subtitle = "Weather") +
+  plotTheme()
 
+```
 
+# Modeling
 
+The goal of this next step was to build a model that accurately predicts average station delay minimizing absolute error and absolute percent error. At each stage we removed outliers based on Cook's Distance which improved our error metrics. Importantly, our data was aggregated at the station-level for our use case.
 
+We used a simple 60/40 train/test split on the aggregated data. Each model has its own unique dataset with increase observations for increasing features.
 
+Model performance was based on out of fold test set predictions.
+`Model 1` looks solely at calendar features, while `Model 2` looks at calendar and weather features, and `Model 3` examines calendar, weather, and geographic features. 
 
+`Model 1` had the lowest absolute error and absolute percent error, but `Model 3` was recommended for the dashboard, given that it is more customizable. 
 
+Our use case was designed to predict future station delays. To accomplish this, we had to aggregate our data to represent each station’s average delays given certain features. These models allow us to build a dashboard with certain inputs that can return a risk score for each station on a particular day. Armed with this knowledge, executives at NJ Transit can prepare for delays as they deem fit (more/less trains, staggering to avoid congestion, etc.).  
 
-### Modeling
-
-#The goal of this next step was to build a model that accurately predicts average station delay
-#minimizing absolute error and absolute percent error. At each stage we removed outliers based on
-#Cook's Distance which improved our error metrics. Importantly, our data was aggregated at the station-level for our use case.
-#We used a simple 60/40 train/test split on the aggregated data. Each model has its own unique dataset with increase observations for increasing features.
-#Model performance was based on out of fold test set predictions.
-#`Model 1` looks solely at calendar features, while `Model 2` looks at calendar and weather features, and `Model 3` examines calendar, weather, and geographic
-#features. `Model 1` had the lowest absolute error and absolute percent error, but `Model 3` was recommended for the dashboard,
-#given that it is more customizable. 
-
+```{r model, results='hide', message=FALSE, warning=FALSE}
 
 # --- Modeling ----
 ## model 1 is station + calendar
-
-mod1df <- njtransit_sf %>%
+mod1df <- njtransit_sf.clean %>%
   st_drop_geometry() %>%
   group_by(to,hour,weekday,month) %>%
   summarize(mean_delay = mean(delay_minutes))
@@ -538,8 +547,6 @@ mod1.training$cd <- cooks.distance(model1)
 
 model1b <- lm(mean_delay ~ to + hour + weekday + month, data = subset(mod1.training, cd<= 4/43135))
 
-summary(model1)
-
 mod1.test <-
   mod1.test %>%
   mutate(Regression = "Model 1: Calendar Features",
@@ -551,7 +558,7 @@ mod1.test <-
 
 ## Model 2 is station + calendar + weather
 
-mod2df <- njtransit_sf %>%
+mod2df <- njtransit_sf.clean %>%
   st_drop_geometry() %>%
   group_by(to,hour,weekday,month,snow) %>%
   summarize(mean_delay = mean(delay_minutes))
@@ -572,7 +579,7 @@ model2b <- lm(mean_delay ~ to + hour + weekday + month + snow, data = subset(mod
 
 mod2.test <-
   mod2.test %>%
-  mutate(Regression = "Model 2: Calendar + Weather Features",
+  mutate(Regression = "Model 2: Calendar + Snow Features",
          Delay.Predict = predict(model2b, mod2.test),
          Delay.Error = Delay.Predict - mean_delay,
          Delay.AbsError = abs(Delay.Predict - mean_delay),
@@ -580,14 +587,13 @@ mod2.test <-
 
 ## Model 3 - Calendar + Weather + Hub Distance
 
-mod3df <- njtransit_sf %>%
+mod3df <- njtransit_sf.clean %>%
   st_drop_geometry() %>%
-  group_by(to,hour,weekday,month,weather) %>%
+  group_by(to,hour,weekday,month,snow) %>%
   summarize(mean_delay = mean(delay_minutes),
             meanNYC = mean(distNYC),
             meanHOB = mean(distHOB),
             meanEWR = mean(distEWR),
-            meanPHL = mean(distPHL),
             meanSEC = mean(distSEC))
 
 set.seed(3459)
@@ -598,33 +604,41 @@ inTrain <- createDataPartition(
 mod3.training <- as.data.frame(mod3df[inTrain,])
 mod3.test <- as.data.frame(mod3df[-inTrain,])
 
-model3 <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
-               meanHOB + meanEWR + meanPHL + meanSEC, data = (mod3.training))
+model3 <- lm(mean_delay ~ to + hour + weekday + month + snow + meanNYC +
+               meanHOB + meanEWR + meanSEC, data = (mod3.training))
 
 mod3.training$cd <- cooks.distance(model3)
 
-model3b <- lm(mean_delay ~ to + hour + weekday + month + weather + meanNYC +
-                meanHOB + meanEWR + meanPHL + meanSEC, data = subset(mod3.training, cd<= 4/84524))
+model3b <- lm(mean_delay ~ to + hour + weekday + month + snow + meanNYC +
+                meanHOB + meanEWR + meanSEC, data = subset(mod3.training, cd<= 4/84524))
 
 
 mod3.test <-
   mod3.test %>%
-  mutate(Regression = "Model 3: Calendar + Weather + Distance Features",
+  mutate(Regression = "Model 3: Calendar + Snow + Distance Features",
          Delay.Predict = predict(model3b, mod3.test),
          Delay.Error = Delay.Predict - mean_delay,
          Delay.AbsError = abs(Delay.Predict - mean_delay),
          Delay.APE = (abs(Delay.Predict - mean_delay)) / Delay.Predict)
 
 
+```
 
+
+#Results
+
+The model with all three feature sets proved to be the most accurate, although the absolute error remains quite high: ~1.629498 minutes.
+
+On the higher end of  delays, this model slightly underpredicts.
+```{r results, message=FALSE, warning=FALSE}
 
 ### Visualizing Results
 
 allRegressions <- 
   rbind(
-    dplyr::select(mod1.test, mean_delay,starts_with("Delay"), Regression),
-    dplyr::select(mod2.test, mean_delay,starts_with("Delay"), Regression),
-    dplyr::select(mod3.test, mean_delay,starts_with("Delay"), Regression))
+    dplyr::select(mod1.test, mean_delay, starts_with("Delay"), Regression),
+    dplyr::select(mod2.test, mean_delay, starts_with("Delay"), Regression),
+    dplyr::select(mod3.test, mean_delay, starts_with("Delay"), Regression))
       
 allRegressions %>%
   gather(Variable,Value,-Regression) %>%
@@ -647,15 +661,10 @@ allRegressions %>%
   facet_wrap(~Regression) +
   ylim(0,50)+
   labs(title="Predicted average station delay as a function of observed delays",
-       subtitle="Orange line represents a perfect prediction; Green line represents actual prediction") +
+       subtitle="Orange line: actual; Green line: prediction") +
   plotTheme()
+```
 
+# Additional Analyses
 
-rmarkdown::render("final_proj.R")
-
-
-
-
-
-
-
+Our analysis was limited by our dataset and the available open source data. While we were able to develop some custom features, it ultimately wasn’t enough to get our percent errors below 40%. Some of our research found that certain bridges can cause station delays. Additionally, ridership could impact delays, especially given various weather conditions and rush hour. Factors like condition and age of trains and rail line infrastructure may also be contributing to delays. Given that every station has an average delay of five minutes, there are clearly intrinsic problems causing delays for New Jersey Transit. Finally, NJ Transit leases some train tracks from Amtrak (specifically the Northeast Corridor line), therefore delays can manifest because of Amtrak. We were unable to fully map the interconnectedness of these rail systems.
