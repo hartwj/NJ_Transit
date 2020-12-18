@@ -16,6 +16,7 @@ output:
 # Introduction
 Train delays can be expensive and disruptive events. As the transportation system with the second highest ridership in the country, delays on NJ Transit lines can be particularly disruptive. Unfortunately NJ Transit is also particularly beleaguered by delays, in part due to the advanced average age of its rolling stock. In this analysis, we hope to predict significant train delays within the NJ Transit system. The use case is to build a dashboard meant to assist senior executives making resource distribution decisions (e.g., engineer staffing, train repair scheduling). In the future, with this applied analysis, NJ Transit could hypothetically determine which stations are likely to experience significant delays and have mechanics and shuttle busses on standby to address delays without inconveniencing commuters.
 
+[Link to project pecha kucha presentation](https://www.youtube.com/watch?v=2RC908M7eVY)
 
 # Setup:
 ```{r setup, results='hide', message=FALSE, warning=FALSE}
