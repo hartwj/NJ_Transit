@@ -290,8 +290,6 @@ After looking at average delay by station, we find that all of the stations on t
 
 ```{r station explo, message=FALSE, warning=FALSE}
 # --- Visualizations ----
-# mapview::mapview(station_geo, na.col = "#f27a60", zcol = "Lines")
-
 ## Delay by station - is it consistent?
 njtransit_sf %>%
   st_drop_geometry %>%
@@ -625,8 +623,7 @@ mod3.test <-
 
 ```
 
-
-#Results
+# Results
 
 The model with all three feature sets proved to be the most accurate, although the absolute error remains quite high: ~1.629498 minutes.
 
